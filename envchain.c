@@ -76,7 +76,7 @@ envchain_abort_with_help(void)
     "    Enable noecho mode when prompting values. Requires stdin to be a terminal.\n"
     "\n"
     "  --require-passphrase (-p), --no-require-passphrase (-P):\n"
-    "    Replace the item's ACL list to require passphrase (or not).\n"
+    "    Configure whether the item prompts for access.\n"
     "    Leave as is when both options are omitted.\n"
     "\n"
     "  --approve:\n"
