@@ -523,3 +523,172 @@ envchain_binary_fingerprint(const char *path)
   if (result != NULL) return result;
   return envchain_sha256_file(path);
 }
+
+int
+envchain_save_value_biometric(const char *name, const char *key, char *value)
+{
+  CFStringRef svc = envchain_generate_service_name_cf(name);
+  CFErrorRef error = NULL;
+
+  if (svc == NULL) {
+    return 1;
+  }
+
+  /* Preflight: test if biometric ACL creation works on this build */
+  SecAccessControlRef access = SecAccessControlCreateWithFlags(
+    kCFAllocatorDefault,
+    kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+    kSecAccessControlUserPresence,
+    &error
+  );
+
+  if (error != NULL || access == NULL) {
+    fprintf(stderr, "%s: biometric access control not available on this build\n",
+            envchain_name);
+    if (error) CFRelease(error);
+    CFRelease(svc);
+    return 1;
+  }
+
+  /* Preflight: try adding a temporary test item to verify signing support */
+  CFStringRef test_svc = CFStringCreateWithCString(
+    NULL, "envchain-biometric-preflight", kCFStringEncodingUTF8);
+  CFStringRef test_acct = CFStringCreateWithCString(
+    NULL, "preflight-test", kCFStringEncodingUTF8);
+  CFDataRef test_val = CFDataCreate(NULL, (const UInt8 *)"test", 4);
+
+  CFMutableDictionaryRef preflight = CFDictionaryCreateMutable(
+    NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+  CFDictionarySetValue(preflight, kSecClass, kSecClassGenericPassword);
+  CFDictionarySetValue(preflight, kSecAttrService, test_svc);
+  CFDictionarySetValue(preflight, kSecAttrAccount, test_acct);
+  CFDictionarySetValue(preflight, kSecValueData, test_val);
+  CFDictionarySetValue(preflight, kSecAttrAccessControl, access);
+
+  OSStatus status = SecItemAdd(preflight, NULL);
+
+  /* Clean up preflight item regardless of outcome */
+  CFMutableDictionaryRef del_preflight = CFDictionaryCreateMutable(
+    NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+  CFDictionarySetValue(del_preflight, kSecClass, kSecClassGenericPassword);
+  CFDictionarySetValue(del_preflight, kSecAttrService, test_svc);
+  CFDictionarySetValue(del_preflight, kSecAttrAccount, test_acct);
+  SecItemDelete(del_preflight);
+  CFRelease(del_preflight);
+  CFRelease(preflight);
+  CFRelease(test_svc);
+  CFRelease(test_acct);
+  CFRelease(test_val);
+
+  if (status == errSecMissingEntitlement) {
+    fprintf(stderr,
+      "%s: this build is not signed for biometric keychain ACLs\n"
+      "  Use the touchid-check helper instead (see contrib/shell-guards.zsh)\n"
+      "  Or sign envchain with an Apple Developer certificate\n",
+      envchain_name);
+    CFRelease(access);
+    CFRelease(svc);
+    return 1;
+  }
+  if (status != errSecSuccess && status != errSecDuplicateItem) {
+    fprintf(stderr, "%s: biometric preflight failed: %d\n",
+            envchain_name, (int)status);
+    CFRelease(access);
+    CFRelease(svc);
+    return 1;
+  }
+
+  /* Preflight passed — safe to attempt the real item */
+  CFStringRef acct = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+  CFDataRef val = CFDataCreate(NULL, (const UInt8 *)value, strlen(value));
+  CFStringRef desc = CFStringCreateWithCString(
+    NULL, ENVCHAIN_ITEM_DESCRIPTION, kCFStringEncodingUTF8);
+
+  /* Try adding first (works if item doesn't exist yet) */
+  CFMutableDictionaryRef query = CFDictionaryCreateMutable(
+    NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+  CFDictionarySetValue(query, kSecClass, kSecClassGenericPassword);
+  CFDictionarySetValue(query, kSecAttrService, svc);
+  CFDictionarySetValue(query, kSecAttrAccount, acct);
+  CFDictionarySetValue(query, kSecValueData, val);
+  CFDictionarySetValue(query, kSecAttrAccessControl, access);
+  CFDictionarySetValue(query, kSecAttrDescription, desc);
+
+  status = SecItemAdd(query, NULL);
+  CFRelease(query);
+
+  if (status == errSecDuplicateItem) {
+    /* Item exists — delete and re-add */
+    CFMutableDictionaryRef del_query = CFDictionaryCreateMutable(
+      NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(del_query, kSecClass, kSecClassGenericPassword);
+    CFDictionarySetValue(del_query, kSecAttrService, svc);
+    CFDictionarySetValue(del_query, kSecAttrAccount, acct);
+    SecItemDelete(del_query);
+    CFRelease(del_query);
+
+    /* Re-add with biometric ACL */
+    CFMutableDictionaryRef re_query = CFDictionaryCreateMutable(
+      NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(re_query, kSecClass, kSecClassGenericPassword);
+    CFDictionarySetValue(re_query, kSecAttrService, svc);
+    CFDictionarySetValue(re_query, kSecAttrAccount, acct);
+    CFDictionarySetValue(re_query, kSecValueData, val);
+    CFDictionarySetValue(re_query, kSecAttrAccessControl, access);
+    CFDictionarySetValue(re_query, kSecAttrDescription, desc);
+
+    status = SecItemAdd(re_query, NULL);
+    CFRelease(re_query);
+
+    if (status != errSecSuccess) {
+      OSStatus restore_status;
+
+      /* Biometric re-add failed — restore as normal item so secret isn't lost */
+      fprintf(stderr, "%s: biometric save failed, restoring as normal item\n",
+              envchain_name);
+      CFMutableDictionaryRef restore = CFDictionaryCreateMutable(
+        NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+      CFDictionarySetValue(restore, kSecClass, kSecClassGenericPassword);
+      CFDictionarySetValue(restore, kSecAttrService, svc);
+      CFDictionarySetValue(restore, kSecAttrAccount, acct);
+      CFDictionarySetValue(restore, kSecValueData, val);
+      CFDictionarySetValue(restore, kSecAttrDescription, desc);
+      restore_status = SecItemAdd(restore, NULL);
+      CFRelease(restore);
+
+      if (restore_status != errSecSuccess) {
+        fprintf(stderr,
+          "%s: failed to restore the original non-biometric item: %d\n",
+          envchain_name, (int)restore_status);
+      }
+
+      CFRelease(svc);
+      CFRelease(acct);
+      CFRelease(val);
+      CFRelease(desc);
+      CFRelease(access);
+      CFRelease(svc);
+      return 1;
+    }
+  }
+  else if (status != errSecSuccess) {
+    fprintf(stderr, "%s: failed to save biometric keychain item: %d\n",
+            envchain_name, (int)status);
+    CFRelease(svc);
+    CFRelease(acct);
+    CFRelease(val);
+    CFRelease(desc);
+    CFRelease(access);
+    CFRelease(svc);
+    return 1;
+  }
+
+  CFRelease(svc);
+  CFRelease(acct);
+  CFRelease(val);
+  CFRelease(desc);
+  CFRelease(access);
+
+  fprintf(stderr, "Saved with Touch ID protection\n");
+  return 0;
+}
