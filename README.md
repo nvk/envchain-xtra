@@ -1,27 +1,40 @@
 # envchain - set environment variables with macOS keychain or D-Bus secret service
 
+This repository is a fork of the original [`sorah/envchain`](https://github.com/sorah/envchain).
+The goal here is to stay close to the upstream project while evaluating a small number of
+security- and macOS-focused changes separately.
+
 ## What?
 
 Secrets for common computing environments, such as `AWS_SECRET_ACCESS_KEY`, are
-set with environment variables.
+commonly provided through environment variables.
 
-A common practice is to set them in shell's intialization files such as `.bashrc` and `.zshrc`.
+A common practice is to place them in shell initialization files such as `.bashrc` and `.zshrc`.
 
 Putting these secrets on disk in this way is a grave risk.
 
-`envchain` allows you to secure credential environment variables to your secure vault, and set to environment variables only when you called explicitly.
+`envchain` stores credential values in a secure vault and exports them to environment
+variables only when you invoke it explicitly.
 
-Currently, `envchain` supports macOS keychain and D-Bus secret service (gnome-keyring) as a vault.
+Currently, `envchain` supports macOS Keychain and D-Bus Secret Service
+(`gnome-keyring`) as storage backends.
 
 Don't give any credentials implicitly!
 
-## Requirement (macOS)
+## Testing
+
+The following changes are being evaluated in open pull requests and are not part of `master` yet:
+
+- [PR #1: Add macOS Touch ID gates and biometric secret storage (legacy version)](https://github.com/nvk/envchain-xtra/pull/1)
+- [PR #2: Migrate the macOS backend from SecKeychain to SecItem (modern version)](https://github.com/nvk/envchain-xtra/pull/2)
+
+## Requirements (macOS)
 
 - macOS
   - Confirmed to work on OS X 10.11 (El Capitan), macOS 10.12 (Sierra).
   - OS X 10.7 (Lion) or later is required, but not confirmed
 
-## Requirement (Linux)
+## Requirements (Linux)
 
 - readline
 - libsecret
@@ -41,7 +54,7 @@ $ sudo make install
 $ cp ./envchain ~/bin/
 ```
 
-### Homebrew (OS X)
+### Homebrew (macOS)
 
 ```
 brew install envchain
@@ -58,7 +71,8 @@ envchain --set NAMESPACE ENV [ENV ..]
 ```
 
 You will be prompted to enter the values for each variable.
-For example, we can set two variables... `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` here, within a namespace called `aws`:
+For example, we can set two variables, `AWS_ACCESS_KEY_ID` and
+`AWS_SECRET_ACCESS_KEY`, within a namespace called `aws`:
 
 ```
 $ envchain --set aws AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
@@ -94,7 +108,7 @@ $ envchain hubot env | grep HUBOT_
 HUBOT_HIPCHAT_PASSWORD: xxxx
 ```
 
-You may specify multiple namespaces at once, with separating by commas:
+You may specify multiple namespaces at once by separating them with commas:
 
 ```
 $ envchain aws,hubot env | grep 'AWS_\|HUBOT_'
