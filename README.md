@@ -23,10 +23,9 @@ Don't give any credentials implicitly!
 
 ## Testing
 
-The following changes are being evaluated in open pull requests and are not part of `master` yet:
+The following change is being evaluated in an open pull request and is not part of `master` yet:
 
-- [PR #1: Add macOS Touch ID gates and biometric secret storage (legacy version)](https://github.com/nvk/envchain-xtra/pull/1)
-- [PR #2: Migrate the macOS backend from SecKeychain to SecItem (modern version)](https://github.com/nvk/envchain-xtra/pull/2)
+- [PR #1: Add macOS Touch ID gates and biometric secret storage](https://github.com/nvk/envchain-xtra/pull/1)
 
 ## Requirements (macOS)
 
@@ -117,6 +116,32 @@ AWS_SECRET_ACCESS_KEY=secret
 HUBOT_HIPCHAT_PASSWORD: xxxx
 ```
 
+### NEW: Guarded shell usage
+
+For wrapper-based workflows in this fork, the shell guard layer is part of the
+intended usage model.
+
+`envchain` authorizes the program it executes directly. If you use a wrapper such
+as `nono` that then launches another binary, use [`contrib/shell-guards.zsh`](contrib/shell-guards.zsh)
+to verify the final binary before credentials are injected.
+
+```zsh
+source /path/to/contrib/shell-guards.zsh
+
+my_tool() {
+  _verify_binary my_tool || return 1
+  envchain my-namespace nono run -- command my_tool "$@"
+}
+```
+
+The helper file also provides:
+
+- `envchain-approve <binary>` to store a fingerprint for a resolved binary path
+- `envchain-reapprove` to refresh fingerprints after upgrades
+- `envchain-status` to inspect the allowlist and current fingerprints
+
+If you also want a human-approval gate, `_require_touchid` can be used with an
+external `touchid-check` helper when `ENVCHAIN_TOUCHID=1`.
 
 ### More options
 
