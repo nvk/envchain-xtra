@@ -1,6 +1,8 @@
 #include "envchain.h"
 #include <libsecret/secret.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 static const SecretSchema *envchain_get_schema(void) {
   static const SecretSchema the_schema = {
@@ -204,4 +206,49 @@ void envchain_delete_value(const char *name, const char *key) {
             envchain_name, error->code, error->message);
     g_error_free(error);
   }
+}
+
+int envchain_path_is_native_binary(const char *path) {
+  FILE *fp = fopen(path, "rb");
+  unsigned char magic[4];
+
+  if (fp == NULL) return 0;
+  if (fread(magic, 1, sizeof(magic), fp) != sizeof(magic)) {
+    fclose(fp);
+    return 0;
+  }
+  fclose(fp);
+
+  return magic[0] == 0x7f && magic[1] == 'E' &&
+         magic[2] == 'L' && magic[3] == 'F';
+}
+
+char *envchain_binary_fingerprint(const char *path) {
+  FILE *fp = fopen(path, "rb");
+  GChecksum *checksum;
+  char buf[8192];
+  size_t nread;
+  char *result = NULL;
+
+  if (fp == NULL) return NULL;
+
+  checksum = g_checksum_new(G_CHECKSUM_SHA256);
+  if (checksum == NULL) {
+    fclose(fp);
+    return NULL;
+  }
+
+  while ((nread = fread(buf, 1, sizeof(buf), fp)) > 0) {
+    g_checksum_update(checksum, (const guchar*)buf, nread);
+  }
+  if (ferror(fp)) {
+    g_checksum_free(checksum);
+    fclose(fp);
+    return NULL;
+  }
+
+  asprintf(&result, "sha256-file:%s", g_checksum_get_string(checksum));
+  g_checksum_free(checksum);
+  fclose(fp);
+  return result;
 }

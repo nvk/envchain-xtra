@@ -20,5 +20,7 @@ int envchain_search_values(const char *name, envchain_search_callback callback,
 void envchain_save_value(const char *name, const char *key, char *value,
                          int require_passphrase);
 void envchain_delete_value(const char *name, const char *key);
+int envchain_path_is_native_binary(const char *path);
+char *envchain_binary_fingerprint(const char *path);
 
 #endif

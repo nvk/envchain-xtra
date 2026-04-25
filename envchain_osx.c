@@ -1,7 +1,13 @@
 #include <mach-o/dyld.h>
+#include <mach-o/fat.h>
+#include <mach-o/loader.h>
 
+#include <CommonCrypto/CommonDigest.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <Security/Security.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "envchain.h"
 
@@ -458,4 +464,107 @@ envchain_delete_value(const char *name, const char *key) {
   if (envchain_find_value(name, key, &ref) != 0) {
     SecKeychainItemDelete(ref);
   }
+}
+
+int
+envchain_path_is_native_binary(const char *path)
+{
+  FILE *fp = fopen(path, "rb");
+  UInt32 magic;
+
+  if (fp == NULL) return 0;
+  if (fread(&magic, sizeof(magic), 1, fp) != 1) {
+    fclose(fp);
+    return 0;
+  }
+  fclose(fp);
+
+  return magic == MH_MAGIC || magic == MH_CIGAM ||
+         magic == MH_MAGIC_64 || magic == MH_CIGAM_64 ||
+         magic == FAT_MAGIC || magic == FAT_CIGAM ||
+         magic == FAT_MAGIC_64 || magic == FAT_CIGAM_64;
+}
+
+static char *
+envchain_hex_prefixed(const unsigned char *bytes, size_t len, const char *prefix)
+{
+  size_t prefix_len = strlen(prefix);
+  char *result = malloc(prefix_len + (len * 2) + 1);
+  size_t i;
+
+  if (result == NULL) return NULL;
+
+  memcpy(result, prefix, prefix_len);
+  for (i = 0; i < len; i++) {
+    snprintf(result + prefix_len + (i * 2), 3, "%02x", bytes[i]);
+  }
+  result[prefix_len + (len * 2)] = '\0';
+  return result;
+}
+
+static char *
+envchain_sha256_file(const char *path)
+{
+  FILE *fp = fopen(path, "rb");
+  CC_SHA256_CTX ctx;
+  unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+  unsigned char buf[8192];
+  size_t nread;
+
+  if (fp == NULL) return NULL;
+
+  CC_SHA256_Init(&ctx);
+  while ((nread = fread(buf, 1, sizeof(buf), fp)) > 0) {
+    CC_SHA256_Update(&ctx, buf, (CC_LONG)nread);
+  }
+  if (ferror(fp)) {
+    fclose(fp);
+    return NULL;
+  }
+
+  CC_SHA256_Final(digest, &ctx);
+  fclose(fp);
+
+  return envchain_hex_prefixed(digest, sizeof(digest), "sha256-file:");
+}
+
+char *
+envchain_binary_fingerprint(const char *path)
+{
+  CFURLRef url = NULL;
+  SecStaticCodeRef code = NULL;
+  CFDictionaryRef info = NULL;
+  char *result = NULL;
+
+  url = CFURLCreateFromFileSystemRepresentation(
+    NULL, (const UInt8*)path, strlen(path), 0
+  );
+  if (url != NULL) {
+    OSStatus status = SecStaticCodeCreateWithPath(url, kSecCSDefaultFlags, &code);
+    if (status == noErr && code != NULL) {
+      status = SecCodeCopySigningInformation(code, kSecCSSigningInformation, &info);
+      if (status == noErr && info != NULL) {
+        CFDataRef unique = CFDictionaryGetValue(info, kSecCodeInfoUnique);
+        if (unique != NULL && CFGetTypeID(unique) == CFDataGetTypeID()) {
+          const unsigned char *bytes = CFDataGetBytePtr(unique);
+          CFIndex len = CFDataGetLength(unique);
+          const char *prefix = "codesign-unique:";
+
+          if (len == 20) prefix = "cdhash-sha1:";
+          else if (len == 32) prefix = "cdhash-sha256:";
+
+          if (bytes != NULL && len > 0) {
+            result = envchain_hex_prefixed(bytes, (size_t)len, prefix);
+          }
+        }
+      }
+    }
+  }
+
+  if (info != NULL) CFRelease(info);
+  if (code != NULL) CFRelease(code);
+  if (url != NULL) CFRelease(url);
+
+  if (result != NULL) return result;
+  return envchain_sha256_file(path);
 }
