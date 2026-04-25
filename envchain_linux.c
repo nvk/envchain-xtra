@@ -252,3 +252,9 @@ char *envchain_binary_fingerprint(const char *path) {
   fclose(fp);
   return result;
 }
+
+int envchain_save_value_biometric(const char *name, const char *key, char *value) {
+  (void)name; (void)key; (void)value;
+  fprintf(stderr, "%s: --biometric is unsupported on this platform\n", envchain_name);
+  return 1;
+}

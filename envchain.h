@@ -19,6 +19,8 @@ int envchain_search_values(const char *name, envchain_search_callback callback,
                            void *data);
 void envchain_save_value(const char *name, const char *key, char *value,
                          int require_passphrase);
+int envchain_save_value_biometric(const char *name, const char *key,
+                                  char *value);
 void envchain_delete_value(const char *name, const char *key);
 int envchain_path_is_native_binary(const char *path);
 char *envchain_binary_fingerprint(const char *path);

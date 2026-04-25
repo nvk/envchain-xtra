@@ -1,3 +1,5 @@
 envchain
 *.o
 *.dSYM
+touchid-check
+entitlements.plist

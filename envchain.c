@@ -54,7 +54,7 @@ envchain_abort_with_help(void)
     "%s version %s\n\n"
     "Usage:\n"
     "  Add variables\n"
-    "    %s (--set|-s) [--[no-]require-passphrase|-p|-P] [--noecho|-n] NAMESPACE ENV [ENV ..]\n"
+    "    %s (--set|-s) [--biometric|-b] [--[no-]require-passphrase|-p|-P] [--noecho|-n] NAMESPACE ENV [ENV ..]\n"
     "  Execute with variables\n"
     "    %s NAMESPACE CMD [ARG ...]\n"
     "  List namespaces\n"
@@ -162,6 +162,7 @@ envchain_set(int argc, const char **argv)
 {
   int noecho = 0;
   int require_passphrase = -1;
+  int biometric = 0;
   const char *name, *key;
   char *value;
 
@@ -180,6 +181,10 @@ envchain_set(int argc, const char **argv)
       argv++; argc--;
       require_passphrase = 0;
     }
+    else if (strcmp(argv[0], "-b") == 0 || strcmp(argv[0], "--biometric") == 0) {
+      argv++; argc--;
+      biometric = 1;
+    }
     else {
       fprintf(stderr, "Unknown option: %s\n", argv[0]);
       return 1;
@@ -197,7 +202,11 @@ envchain_set(int argc, const char **argv)
     value = envchain_ask_value(name, key, noecho);
     if (value == NULL) return 1;
 
-    envchain_save_value(name, key, value, require_passphrase);
+    if (biometric) {
+      if (envchain_save_value_biometric(name, key, value) != 0) return 1;
+    } else {
+      envchain_save_value(name, key, value, require_passphrase);
+    }
   }
 
   return 0;
