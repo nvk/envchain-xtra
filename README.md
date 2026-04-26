@@ -26,18 +26,34 @@ Don't give any credentials implicitly!
 The intended security model in this fork is not just "store secrets in Keychain and
 run `envchain`."
 
-For wrapper-based workflows, there are two separate trust decisions:
+The preferred stack is:
 
-- `envchain` approves the binary it executes directly and fingerprints that exact
-  path before exporting secrets
-- [`contrib/shell-guards.zsh`](contrib/shell-guards.zsh) approves the final leaf
-  binary when a trusted wrapper such as `nono` launches something else on your behalf
+```text
+shell name -> bondage -> [envchain] -> [nono] -> exact pinned tool
+```
 
-If you use wrappers, the shell guard layer is part of the intended setup. Without it,
-`envchain` can validate the wrapper (`nono`) but not the final tool (`claude`,
-`codex`, `opencode`, `pi`, etc.) that the wrapper actually launches.
+In that model:
 
-Recommended pattern:
+- `envchain` stores and releases secrets
+- `envchain` approves the direct binary it executes
+- `bondage` verifies the exact leaf target, interpreter, and package tree
+- `nono` remains the sandbox layer
+
+That split is cleaner because secret release, launch verification, and sandbox policy
+stay in separate layers instead of being mixed into shell glue.
+
+### Compatibility Layer: `contrib/shell-guards.zsh`
+
+[`contrib/shell-guards.zsh`](contrib/shell-guards.zsh) is still provided for
+wrapper-based workflows that have not moved to `bondage` yet.
+
+It remains useful as a transitional or lightweight compatibility layer because it can:
+
+- fingerprint the direct binary `envchain` executes
+- fingerprint the final leaf binary a trusted wrapper launches
+- optionally require an external `touchid-check` helper before launch
+
+Example:
 
 ```zsh
 source /path/to/contrib/shell-guards.zsh
@@ -57,9 +73,9 @@ The helper file also provides:
 If you also want a human-approval gate, `_require_touchid` can be used with an
 external `touchid-check` helper when `ENVCHAIN_TOUCHID=1`.
 
-Longer-term, the goal should be to absorb the leaf-binary verification logic into
-`envchain` itself so the shell script becomes convenience glue instead of a required
-security component.
+For new setups, `bondage` should be the preferred launcher path. The shell guard
+script is best treated as compatibility glue for setups that still need shell-based
+wrappers.
 
 ## Testing
 
@@ -91,6 +107,12 @@ brew install nvk/tap/envchain-xtra
 ```
 
 This installs the `envchain` executable from this fork.
+
+If you also want the launcher/policy layer described above:
+
+```
+brew install nvk/tap/agent-bondage
+```
 
 It intentionally conflicts with the upstream Homebrew `envchain` formula because
 both install the same binary name.
