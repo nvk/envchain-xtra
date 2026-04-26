@@ -1,3 +1,12 @@
+```text
+             _
+            | |
+ ________  _| |_ _ __ __ _
+|______\ \/ / __| '__/ _` |
+        >  <| |_| | | (_| |
+       /_/\_\\__|_|  \__,_|
+```
+
 # envchain - set environment variables with macOS keychain or D-Bus secret service
 
 This repository is a fork of the original [`sorah/envchain`](https://github.com/sorah/envchain).
