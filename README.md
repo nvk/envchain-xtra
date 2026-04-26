@@ -13,6 +13,15 @@ This repository is a fork of the original [`sorah/envchain`](https://github.com/
 The goal here is to stay close to the upstream project while evaluating a small number of
 security- and macOS-focused changes separately.
 
+The premise is not subtle:
+
+- you cannot let coding agents run loose with live keys
+- you cannot assume a familiar command implies a trustworthy dependency tree
+- you should not grant broad ambient environment access by default
+
+This fork exists to keep the secret-release layer strong while leaving launch
+verification and sandbox policy to the layers above and below it.
+
 ## What?
 
 Secrets for common computing environments, such as `AWS_SECRET_ACCESS_KEY`, are
@@ -50,6 +59,12 @@ In that model:
 
 That split is cleaner because secret release, launch verification, and sandbox policy
 stay in separate layers instead of being mixed into shell glue.
+
+It also deliberately leans on the OS where the OS is stronger than userland glue:
+
+- Keychain remains the real secret store on macOS
+- OS-level signing identity can be used as part of binary approval and drift detection
+- `envchain` is not trying to replace either of those with custom storage logic
 
 ### Compatibility Layer: `contrib/shell-guards.zsh`
 
