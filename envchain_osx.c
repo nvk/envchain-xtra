@@ -276,7 +276,6 @@ envchain_search_values(const char *name, envchain_search_callback callback, void
   CFDictionarySetValue(query, kSecClass, kSecClassGenericPassword);
   CFDictionarySetValue(query, kSecAttrService, service_name);
   CFDictionarySetValue(query, kSecReturnAttributes, kCFBooleanTrue);
-  CFDictionarySetValue(query, kSecReturnData, kCFBooleanTrue);
   CFDictionarySetValue(query, kSecMatchLimit, kSecMatchLimitAll);
 
   status = SecItemCopyMatching(query, &results);
@@ -305,17 +304,29 @@ envchain_search_values(const char *name, envchain_search_callback callback, void
     CFDictionaryRef item = CFArrayGetValueAtIndex(items, i);
 
     CFStringRef acct_cf = CFDictionaryGetValue(item, kSecAttrAccount);
-    CFDataRef val_cf = CFDictionaryGetValue(item, kSecValueData);
+    CFDataRef val_cf = NULL;
 
-    if (acct_cf == NULL || val_cf == NULL) continue;
+    if (acct_cf == NULL) continue;
 
     char acct_buf[1024];
     if (!CFStringGetCString(acct_cf, acct_buf, sizeof(acct_buf), kCFStringEncodingUTF8))
       continue;
 
+    status = envchain_copy_item_data(service_name, acct_cf, &val_cf);
+    if (status != errSecSuccess) {
+      CFRelease(items);
+      CFRelease(query);
+      CFRelease(service_name);
+      envchain_fail_osstatus(status);
+      return 1;
+    }
+
     CFIndex val_len = CFDataGetLength(val_cf);
     char *value = malloc(val_len + 1);
-    if (value == NULL) continue;
+    if (value == NULL) {
+      CFRelease(val_cf);
+      continue;
+    }
     memcpy(value, CFDataGetBytePtr(val_cf), val_len);
     value[val_len] = '\0';
 
@@ -323,6 +334,7 @@ envchain_search_values(const char *name, envchain_search_callback callback, void
 
     memset(value, 0, val_len);
     free(value);
+    CFRelease(val_cf);
   }
 
   CFRelease(items);
