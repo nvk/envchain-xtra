@@ -21,6 +21,46 @@ Currently, `envchain` supports macOS Keychain and D-Bus Secret Service
 
 Don't give any credentials implicitly!
 
+## Security Model in This Fork
+
+The intended security model in this fork is not just "store secrets in Keychain and
+run `envchain`."
+
+For wrapper-based workflows, there are two separate trust decisions:
+
+- `envchain` approves the binary it executes directly and fingerprints that exact
+  path before exporting secrets
+- [`contrib/shell-guards.zsh`](contrib/shell-guards.zsh) approves the final leaf
+  binary when a trusted wrapper such as `nono` launches something else on your behalf
+
+If you use wrappers, the shell guard layer is part of the intended setup. Without it,
+`envchain` can validate the wrapper (`nono`) but not the final tool (`claude`,
+`codex`, `opencode`, `pi`, etc.) that the wrapper actually launches.
+
+Recommended pattern:
+
+```zsh
+source /path/to/contrib/shell-guards.zsh
+
+my_tool() {
+  _verify_binary my_tool || return 1
+  envchain my-namespace nono run -- command my_tool "$@"
+}
+```
+
+The helper file also provides:
+
+- `envchain-approve <binary>` to store a fingerprint for a resolved binary path
+- `envchain-reapprove` to refresh fingerprints after upgrades
+- `envchain-status` to inspect the allowlist and current fingerprints
+
+If you also want a human-approval gate, `_require_touchid` can be used with an
+external `touchid-check` helper when `ENVCHAIN_TOUCHID=1`.
+
+Longer-term, the goal should be to absorb the leaf-binary verification logic into
+`envchain` itself so the shell script becomes convenience glue instead of a required
+security component.
+
 ## Testing
 
 The following change is being evaluated in an open pull request and is not part of `master` yet:
@@ -43,7 +83,34 @@ The following change is being evaluated in an open pull request and is not part 
 
 ## Installation
 
+### Homebrew Tap (macOS)
+
+```
+brew tap nvk/tap
+brew install nvk/tap/envchain-xtra
+```
+
+This installs the `envchain` executable from this fork.
+
+It intentionally conflicts with the upstream Homebrew `envchain` formula because
+both install the same binary name.
+
+If upstream `envchain` is already installed:
+
+```
+brew uninstall envchain
+brew install nvk/tap/envchain-xtra
+```
+
+If `envchain-xtra` is already installed but not linked yet:
+
+```
+brew link --overwrite envchain-xtra
+```
+
 ### From Source
+
+This path is mainly for development work on the fork itself:
 
 ```
 $ make
@@ -51,12 +118,6 @@ $ make
 $ sudo make install
 (or)
 $ cp ./envchain ~/bin/
-```
-
-### Homebrew (macOS)
-
-```
-brew install envchain
 ```
 
 ## Usage
@@ -116,33 +177,6 @@ AWS_SECRET_ACCESS_KEY=secret
 HUBOT_HIPCHAT_PASSWORD: xxxx
 ```
 
-### NEW: Guarded shell usage
-
-For wrapper-based workflows in this fork, the shell guard layer is part of the
-intended usage model.
-
-`envchain` authorizes the program it executes directly. If you use a wrapper such
-as `nono` that then launches another binary, use [`contrib/shell-guards.zsh`](contrib/shell-guards.zsh)
-to verify the final binary before credentials are injected.
-
-```zsh
-source /path/to/contrib/shell-guards.zsh
-
-my_tool() {
-  _verify_binary my_tool || return 1
-  envchain my-namespace nono run -- command my_tool "$@"
-}
-```
-
-The helper file also provides:
-
-- `envchain-approve <binary>` to store a fingerprint for a resolved binary path
-- `envchain-reapprove` to refresh fingerprints after upgrades
-- `envchain-status` to inspect the allowlist and current fingerprints
-
-If you also want a human-approval gate, `_require_touchid` can be used with an
-external `touchid-check` helper when `ENVCHAIN_TOUCHID=1`.
-
 ### More options
 
 #### `--list`
@@ -197,3 +231,7 @@ $ envchain --set --no-require-passphrase name
 ## License
 
 MIT License
+
+## Releasing
+
+See [`RELEASING.md`](RELEASING.md).
