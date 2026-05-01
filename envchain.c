@@ -47,14 +47,14 @@ const char *envchain_name;
 /* for help */
 
 static void
-envchain_abort_with_help(void)
+envchain_print_help(FILE *stream)
 {
   fprintf(
-    stderr,
+    stream,
     "%s version %s\n\n"
     "Usage:\n"
     "  Add variables\n"
-    "    %s (--set|-s) [--[no-]require-passphrase|-p|-P] [--noecho|-n] NAMESPACE ENV [ENV ..]\n"
+    "    %s (--set|-s) [--[no-]require-passphrase|-p|-P] [--echo|-e] [--noecho|-n] NAMESPACE ENV [ENV ..]\n"
     "  Execute with variables\n"
     "    %s NAMESPACE CMD [ARG ...]\n"
     "  List namespaces\n"
@@ -73,7 +73,10 @@ envchain_abort_with_help(void)
     "    Add keychain item of environment variable +ENV+ for namespace +NAMESPACE+.\n"
     "\n"
     "  --noecho (-n):\n"
-    "    Enable noecho mode when prompting values. Requires stdin to be a terminal.\n"
+    "    Keep prompted values hidden while typing. This is the default.\n"
+    "\n"
+    "  --echo (-e):\n"
+    "    Echo prompted values while typing. This is unsafe for shared terminals and logs.\n"
     "\n"
     "  --require-passphrase (-p), --no-require-passphrase (-P):\n"
     "    Configure whether the item prompts for access.\n"
@@ -92,6 +95,12 @@ envchain_abort_with_help(void)
     envchain_name, envchain_name, envchain_name, envchain_name,
     envchain_name, envchain_name, envchain_name
   );
+}
+
+static void
+envchain_abort_with_help(void)
+{
+  envchain_print_help(stderr);
   exit(2);
 }
 
@@ -103,11 +112,14 @@ envchain_noecho_read(char* prompt)
   struct termios term, term_orig;
   char* str = NULL;
   ssize_t len;
-  size_t n;
+  size_t n = 0;
 
   if (tcgetattr(STDIN_FILENO, &term) < 0) {
     if (errno == ENOTTY) {
-      fprintf(stderr, "--noecho (-n) requires stdin to be a terminal\n");
+      len = getline(&str, &n, stdin);
+      if (0 < len && str[len-1] == '\n')
+        str[len - 1] = '\0';
+      return str;
     }
     else {
       fprintf(stderr, "oops when attempted to read: %s\n", strerror(errno));
@@ -122,7 +134,8 @@ envchain_noecho_read(char* prompt)
     exit(10);
   }
 
-  printf("%s (noecho):", prompt);
+  printf("%s (hidden): ", prompt);
+  fflush(stdout);
   len = getline(&str, &n, stdin);
 
   if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &term_orig) < 0) {
@@ -136,6 +149,56 @@ envchain_noecho_read(char* prompt)
   printf("\n");
 
   return str;
+}
+
+static char*
+envchain_redact_value(const char *value)
+{
+  const char *dash;
+  size_t len;
+  size_t prefix_len = 4;
+  size_t suffix_len = 3;
+  size_t dash_prefix_len;
+  char *redacted;
+
+  if (value == NULL) return strdup("...");
+
+  len = strlen(value);
+  if (len == 0) return strdup("(empty)");
+
+  dash = strchr(value, '-');
+  if (dash != NULL) {
+    dash_prefix_len = (size_t)(dash - value) + 1;
+    if (dash_prefix_len < prefix_len) prefix_len = dash_prefix_len;
+  }
+
+  if (len <= prefix_len + suffix_len) return strdup("...");
+
+  redacted = malloc(prefix_len + 3 + suffix_len + 1);
+  if (redacted == NULL) return NULL;
+
+  memcpy(redacted, value, prefix_len);
+  memcpy(redacted + prefix_len, "...", 3);
+  memcpy(redacted + prefix_len + 3, value + len - suffix_len, suffix_len);
+  redacted[prefix_len + 3 + suffix_len] = '\0';
+  return redacted;
+}
+
+static void
+envchain_clear_free(char *value)
+{
+  volatile char *cursor;
+  size_t len;
+  size_t i;
+
+  if (value == NULL) return;
+
+  len = strlen(value);
+  cursor = value;
+  for (i = 0; i < len; i++) {
+    cursor[i] = '\0';
+  }
+  free(value);
 }
 
 
@@ -160,7 +223,7 @@ envchain_ask_value(const char* name, const char* key, int noecho)
 int
 envchain_set(int argc, const char **argv)
 {
-  int noecho = 0;
+  int noecho = 1;
   int require_passphrase = -1;
   const char *name, *key;
   char *value;
@@ -171,6 +234,10 @@ envchain_set(int argc, const char **argv)
     if (strcmp(argv[0], "-n") == 0 || strcmp(argv[0], "--noecho") == 0) {
       argv++; argc--;
       noecho = 1;
+    }
+    else if (strcmp(argv[0], "-e") == 0 || strcmp(argv[0], "--echo") == 0) {
+      argv++; argc--;
+      noecho = 0;
     }
     else if (strcmp(argv[0], "-p") == 0 || strcmp(argv[0], "--require-passphrase") == 0) {
       argv++; argc--;
@@ -198,6 +265,17 @@ envchain_set(int argc, const char **argv)
     if (value == NULL) return 1;
 
     envchain_save_value(name, key, value, require_passphrase);
+    {
+      char *redacted = envchain_redact_value(value);
+      if (redacted != NULL) {
+        printf("%s.%s saved: %s\n", name, key, redacted);
+        free(redacted);
+      }
+      else {
+        printf("%s.%s saved\n", name, key);
+      }
+    }
+    envchain_clear_free(value);
   }
 
   return 0;
@@ -950,6 +1028,10 @@ main(int argc, const char **argv)
   else if (strcmp(argv[0], "--revoke") == 0) {
     argv++; argc--;
     return envchain_revoke(argc, argv);
+  }
+  else if (strcmp(argv[0], "--help") == 0 || strcmp(argv[0], "-h") == 0) {
+    envchain_print_help(stdout);
+    return 0;
   }
   else if (argv[0][0] == '-') {
     fprintf(stderr, "Unknown option %s\n", argv[0]);

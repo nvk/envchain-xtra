@@ -177,20 +177,27 @@ envchain --set NAMESPACE ENV [ENV ..]
 ```
 
 You will be prompted to enter the values for each variable.
+Input is hidden by default. After saving, `envchain` prints a redacted preview:
+the first four characters, or the prefix up to an early dash, followed by
+`...` and the last three characters. Short values are shown only as `...`.
+
 For example, we can set two variables, `AWS_ACCESS_KEY_ID` and
 `AWS_SECRET_ACCESS_KEY`, within a namespace called `aws`:
 
 ```
 $ envchain --set aws AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
-aws.AWS_ACCESS_KEY_ID: my-access-key
-aws.AWS_SECRET_ACCESS_KEY: secret
+aws.AWS_ACCESS_KEY_ID (hidden):
+aws.AWS_ACCESS_KEY_ID saved: my-a...key
+aws.AWS_SECRET_ACCESS_KEY (hidden):
+aws.AWS_SECRET_ACCESS_KEY saved: ...
 ```
 
 Here we define a single new variable within a different namespace:
 
 ```
 $ envchain --set hubot HUBOT_HIPCHAT_PASSWORD
-hubot.HUBOT_HIPCHAT_PASSWORD: xxxx
+hubot.HUBOT_HIPCHAT_PASSWORD (hidden):
+hubot.HUBOT_HIPCHAT_PASSWORD saved: ...
 ```
 
 These will all appear as application passwords with `envchain-NAMESPACE` in the data store (Keychain in macOS, gnome-keyring in common Linux distros).
@@ -236,10 +243,21 @@ hubot
 
 #### `--noecho`
 
-Do not echo user input
+Do not echo user input. This is the default.
 ```
 $ envchain --set --noecho foo BAR
-foo.BAR (noecho):
+foo.BAR (hidden):
+foo.BAR saved: ...
+```
+
+#### `--echo`
+
+Echo user input while typing. Use this only when you explicitly want plaintext
+visible in terminal scrollback or logs.
+```
+$ envchain --set --echo foo BAR
+foo.BAR: visible-while-typing
+foo.BAR saved: visi...ing
 ```
 #### `--require-passphrase`
 
