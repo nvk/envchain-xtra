@@ -7,13 +7,19 @@
        /_/\_\\__|_|  \__,_|
 ```
 
-# envchain - set environment variables with macOS keychain or D-Bus secret service
+# envchain-xtra - maintained envchain fork for safer secret release
 
-This repository is a fork of the original [`sorah/envchain`](https://github.com/sorah/envchain).
-The goal here is to stay close to the upstream project while evaluating a small number of
-security- and macOS-focused changes separately.
+`envchain-xtra` is the maintained NVK fork/distribution of the original
+[`sorah/envchain`](https://github.com/sorah/envchain). It still installs the
+`envchain` executable and keeps the core interface familiar: store secrets in
+the OS vault, then release them only for explicit commands.
 
-The premise is not subtle:
+This fork is no longer just an experiment. As of 2026-05-01, the original
+upstream `master` branch was last updated on 2024-04-24. This fork now carries
+the active macOS maintenance, Homebrew distribution, security defaults, and
+agent-stack integration used by this environment.
+
+The premise remains simple:
 
 - you cannot let coding agents run loose with live keys
 - you cannot assume a familiar command implies a trustworthy dependency tree
@@ -22,7 +28,41 @@ The premise is not subtle:
 This fork exists to keep the secret-release layer strong while leaving launch
 verification and sandbox policy to the layers above and below it.
 
-## What?
+## Maintenance Policy
+
+This fork preserves upstream compatibility where that does not weaken the
+security model. It will intentionally diverge when safer defaults or modern
+macOS behavior require it.
+
+Current fork responsibilities:
+
+- maintain the Homebrew formula as `nvk/tap/envchain-xtra`
+- keep the installed binary name as `envchain` for drop-in compatibility
+- ship macOS Keychain fixes as the primary supported path
+- keep Linux Secret Service support on a best-effort basis
+- default toward non-leaky terminal behavior
+- document how this fits into a multi-agent local security stack
+
+Notable fork changes:
+
+- modernized the macOS backend away from deprecated Keychain APIs toward
+  `SecItem`
+- added binary approval and fingerprint inspection commands
+- made `envchain --set` hide input by default
+- redacts saved-value confirmation output instead of printing secrets in
+  plaintext
+- documents the preferred `bondage` + `nono` launch stack
+
+## Upstream Sync Policy
+
+This fork still tracks the original project as `upstream`, but does not wait on
+upstream for releases that affect local security posture.
+
+Upstream patches are welcome when they fit the fork's goals. If upstream becomes
+active again, this repository remains the maintained downstream distribution for
+the `envchain-xtra` security stack rather than a temporary branch.
+
+## What It Does
 
 Secrets for common computing environments, such as `AWS_SECRET_ACCESS_KEY`, are
 commonly provided through environment variables.
@@ -101,17 +141,21 @@ For new setups, `bondage` should be the preferred launcher path. The shell guard
 script is best treated as compatibility glue for setups that still need shell-based
 wrappers.
 
-## Testing
+## Experimental Branches
 
-The following change is being evaluated in an open pull request and is not part of `master` yet:
+The `touch-id` branch is kept separate from `master` while biometric prompting
+and secret-storage behavior are evaluated:
 
 - [PR #1: Add macOS Touch ID gates and biometric secret storage](https://github.com/nvk/envchain-xtra/pull/1)
+
+The stable path is still `envchain` for secret release, `bondage` for launch
+verification, and `nono` for sandboxing.
 
 ## Requirements (macOS)
 
 - macOS
-  - Confirmed to work on OS X 10.11 (El Capitan), macOS 10.12 (Sierra).
-  - OS X 10.7 (Lion) or later is required, but not confirmed
+  - Current Homebrew releases are built and used on modern Apple Silicon macOS.
+  - Older macOS compatibility is inherited from upstream and best-effort only.
 
 ## Requirements (Linux)
 
@@ -120,6 +164,9 @@ The following change is being evaluated in an open pull request and is not part 
 - D-Bus Secret Service
     - GNOME keyring
     - KeePassXC
+
+Linux support is inherited from upstream. It should not be treated as the
+primary tested path for this fork unless a maintainer is actively exercising it.
 
 ## Installation
 
@@ -131,6 +178,11 @@ brew install nvk/tap/envchain-xtra
 ```
 
 This installs the `envchain` executable from this fork.
+
+Choose this fork when you want the maintained macOS path, safer terminal
+defaults, Homebrew packaging, and integration with the local AI-agent security
+stack. Choose upstream only if you specifically need the original behavior and
+are prepared to own any missing maintenance locally.
 
 If you also want the launcher/policy layer described above:
 
@@ -273,24 +325,20 @@ Do not ask for keychain passphrase
 $ envchain --set --no-require-passphrase name
 ```
 
-## Sponsor
+## Project Lineage
 
-<a href='https://ko-fi.com/J3J8CKMUU' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://cdn.ko-fi.com/cdn/kofi3.png?v=3' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
+`envchain-xtra` is based on `envchain` by Shota Fukumori and contributors.
+The original project made the important design choice: keep secrets out of shell
+startup files and release them only for explicit commands.
 
-### Screenshot
-
-#### OS X Keychain
-
-![](http://img.sorah.jp/20140519_060147_dqwbh_20140519_060144_s1zku_Keychain_Access.png)
-
-#### Seahorse (gnome-keyring)
-
-![](https://img.sorah.jp/2016-06-08_19-46-10_ff9c444.png)
-
-## Author
+Original authors:
 
 - Sorah Fukumori <her@sorah.jp>
 - eagletmt
+
+Fork maintenance and additional changes:
+
+- NVK, 2026-present
 
 ## License
 
