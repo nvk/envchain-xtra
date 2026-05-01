@@ -1,0 +1,7 @@
+title: envchain-xtra
+description: Maintained envchain fork for safer macOS Keychain secret release and local AI-agent security stacks.
+theme: jekyll-theme-minimal
+show_downloads: false
+
+github:
+  repository_url: https://github.com/nvk/envchain-xtra

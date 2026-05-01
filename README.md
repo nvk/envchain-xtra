@@ -7,19 +7,36 @@
        /_/\_\\__|_|  \__,_|
 ```
 
-# envchain-xtra - maintained envchain fork for safer secret release
+# envchain-xtra
 
-`envchain-xtra` is the maintained NVK fork/distribution of the original
-[`sorah/envchain`](https://github.com/sorah/envchain). It still installs the
-`envchain` executable and keeps the core interface familiar: store secrets in
-the OS vault, then release them only for explicit commands.
+Maintained `envchain` fork for safer macOS Keychain secret release and local
+AI-agent security stacks.
+
+`envchain-xtra` installs the familiar `envchain` executable: secrets stay in the
+OS vault, and are released only to the command you explicitly launch. This fork
+keeps the original interface useful while tightening the defaults that matter
+when coding agents, wrappers, and sandbox layers are part of the workflow.
+
+```zsh
+brew tap nvk/tap
+brew install nvk/tap/envchain-xtra
+
+envchain --set aws AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+envchain aws env | grep AWS_
+```
+
+## Why This Fork Exists
+
+The original [`sorah/envchain`](https://github.com/sorah/envchain) made the
+important design choice: do not put secrets in shell startup files. Store them in
+the OS secret store and release them only when needed.
 
 This fork is no longer just an experiment. As of 2026-05-01, the original
 upstream `master` branch was last updated on 2024-04-24. This fork now carries
 the active macOS maintenance, Homebrew distribution, security defaults, and
 agent-stack integration used by this environment.
 
-The premise remains simple:
+The premise is direct:
 
 - you cannot let coding agents run loose with live keys
 - you cannot assume a familiar command implies a trustworthy dependency tree
@@ -27,6 +44,25 @@ The premise remains simple:
 
 This fork exists to keep the secret-release layer strong while leaving launch
 verification and sandbox policy to the layers above and below it.
+
+## What You Get
+
+- `envchain` command compatibility with the maintained `envchain-xtra` package
+- macOS Keychain storage through the modernized `SecItem` path
+- hidden input by default when running `envchain --set`
+- redacted save confirmations instead of plaintext terminal leaks
+- direct binary approval and fingerprint inspection commands
+- Homebrew distribution through `nvk/tap/envchain-xtra`
+- documented fit with `bondage` and `nono` for local agent hardening
+
+## Quick Links
+
+- [Install](#installation)
+- [Usage](#usage)
+- [Security model](#security-model-in-this-fork)
+- [Maintenance policy](#maintenance-policy)
+- [Project lineage](#project-lineage)
+- [Release notes](RELEASING.md)
 
 ## Maintenance Policy
 
