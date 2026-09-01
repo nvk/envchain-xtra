@@ -39,9 +39,10 @@
 #include <readline/readline.h>
 
 #include "envchain.h"
+#include "envchain_metadata.h"
 
 
-static const char version[] = "1.3.1";
+static const char version[] = "1.4.0";
 const char *envchain_name;
 
 /* for help */
@@ -360,9 +361,9 @@ envchain_unset(int argc, const char **argv)
 static void
 envchain_exec_value_callback(const char* key, const char* value, void *context)
 {
-  (void)context; /* silence warning */
+  envchain_exec_metadata *metadata = context;
 
-  setenv(key, value, 1);
+  envchain_exec_metadata_inject(metadata, key, value);
 }
 
 /* allowlist: ~/.envchain/allowed
@@ -949,51 +950,85 @@ envchain_exec(int argc, const char **argv)
 {
   if (argc < 2) envchain_abort_with_help();
 
-  char *name, *names, *exe;
+  const char *namespaces;
+  char *name, *names, *names_copy, *exe;
   char **args;
   char allowlist_path[4096];
+  char *resolved = NULL;
+  envchain_exec_metadata metadata;
+  int result = 1;
 
-  names = (char*)argv[0];
+  namespaces = argv[0];
+  names_copy = strdup(namespaces);
+  if (names_copy == NULL) {
+    fprintf(stderr, "envchain: out of memory\n");
+    return 1;
+  }
+  names = names_copy;
   exe = (char*)argv[1];
   argv++; argc--;
   argv++; argc--;
+  envchain_exec_metadata_init(&metadata);
 
   if (!build_allowlist_path(allowlist_path, sizeof(allowlist_path))) {
-    return 1;
+    goto cleanup;
   }
 
   /* 1. Load secrets first — they may mutate PATH */
   while ((name = strsep(&names, ",")) != NULL) {
-    envchain_search_values(name, &envchain_exec_value_callback, NULL);
+    if (envchain_search_values(name, &envchain_exec_value_callback,
+                               &metadata) != 0) {
+      goto cleanup;
+    }
+    if (metadata.failed) {
+      fprintf(stderr, "envchain: cannot record injection metadata: %s\n",
+              envchain_exec_metadata_error(&metadata));
+      goto cleanup;
+    }
+  }
+
+  if (!envchain_exec_metadata_publish(&metadata, namespaces)) {
+    fprintf(stderr, "envchain: cannot record injection metadata: %s\n",
+            envchain_exec_metadata_error(&metadata));
+    goto cleanup;
   }
 
   /* 2. Resolve exe against the final PATH (post-secret-injection) */
-  char *resolved = resolve_exe_path(exe);
+  resolved = resolve_exe_path(exe);
   if (!resolved) {
     fprintf(stderr, "envchain: cannot resolve path for '%s'\n", exe);
-    return 1;
+    goto cleanup;
   }
 
   /* 3. Validate against allowlist */
   if (!check_allowlist(allowlist_path, resolved, exe)) {
-    free(resolved);
-    return 1;
+    goto cleanup;
   }
 
   /* 4. execv() the resolved absolute path — no second PATH lookup */
   int len = (2+argc);
   args = malloc(sizeof(char*) * len);
+  if (args == NULL) {
+    fprintf(stderr, "envchain: out of memory\n");
+    goto cleanup;
+  }
   args[0] = (char*)exe;
   args[len-1] = NULL;
   if (0 < argc) memcpy(args+1, argv, sizeof(char*) * argc);
 
   if (execv(resolved, args) < 0) {
     fprintf(stderr, "execv failed: %s\n", strerror(errno));
-    free(resolved);
-    return 1;
+    free(args);
+    goto cleanup;
   }
+
+  result = 0;
+
+cleanup:
   free(resolved);
-  return 0;
+  free(names_copy);
+  envchain_exec_metadata_free(&metadata);
+  return result;
 }
 
 /* entry point */

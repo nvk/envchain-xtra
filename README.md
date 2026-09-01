@@ -318,6 +318,19 @@ AWS_SECRET_ACCESS_KEY=secret
 HUBOT_HIPCHAT_PASSWORD: xxxx
 ```
 
+The executed process also receives a sanitized injection manifest:
+
+- `ENVCHAIN_METADATA_VERSION=1`
+- `ENVCHAIN_NAMESPACES` contains the requested comma-separated namespaces
+- `ENVCHAIN_KEYS` contains sorted, comma-separated variable names only
+- `ENVCHAIN_KEYS_ENCODING=percent-v1` identifies percent-encoding used for
+  non-alphanumeric bytes in key names
+
+Secret values are never copied into the manifest. The envchain manifest names
+and the Bondage profile-context names are reserved; envchain fails closed if a
+namespace attempts to define one of them. A namespace lookup failure also stops
+execution instead of launching a command with missing credentials.
+
 ### More options
 
 #### `--list`
