@@ -1,3 +1,4 @@
 envchain
 *.o
 *.dSYM
+tests/test-exec-metadata

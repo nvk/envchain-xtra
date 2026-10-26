@@ -68,6 +68,8 @@ envchain_print_help(FILE *stream)
     "    %s --revoke BINARY\n"
     "  Remove variables\n"
     "    %s --unset NAMESPACE ENV [ENV ..]\n"
+    "  List values (redacted by default)\n"
+    "    %s --list NAMESPACE --show-value [--unsafe-plain]\n"
     "\n"
     "Options:\n"
     "  --set (-s):\n"
@@ -94,7 +96,7 @@ envchain_print_help(FILE *stream)
     ,
     envchain_name, version,
     envchain_name, envchain_name, envchain_name, envchain_name,
-    envchain_name, envchain_name, envchain_name
+    envchain_name, envchain_name, envchain_name, envchain_name
   );
 }
 
@@ -185,6 +187,37 @@ envchain_redact_value(const char *value)
   return redacted;
 }
 
+static int
+envchain_name_key_is_valid(const char *value)
+{
+  const unsigned char *cursor = (const unsigned char *)value;
+
+  if (value == NULL || value[0] == '\0') return 0;
+  while (*cursor != '\0') {
+    if (*cursor <= 0x20 || *cursor == 0x7f || *cursor == '=') return 0;
+    cursor++;
+  }
+  return 1;
+}
+
+static int
+envchain_validate_namespace_key(const char *name, const char *key)
+{
+  if (!envchain_name_key_is_valid(name)) {
+    fprintf(stderr,
+            "envchain: invalid namespace '%s' (control characters, spaces, and '=' are not allowed)\n",
+            name == NULL ? "(null)" : name);
+    return 0;
+  }
+  if (key != NULL && !envchain_name_key_is_valid(key)) {
+    fprintf(stderr,
+            "envchain: invalid key '%s' (control characters, spaces, and '=' are not allowed)\n",
+            key);
+    return 0;
+  }
+  return 1;
+}
+
 static void
 envchain_clear_free(char *value)
 {
@@ -257,10 +290,12 @@ envchain_set(int argc, const char **argv)
 
   name = argv[0];
   argv++; argc--;
+  if (!envchain_validate_namespace_key(name, NULL)) return 1;
 
   while(0 < argc) {
     key = argv[0];
     argv++; argc--;
+    if (!envchain_validate_namespace_key(NULL, key)) return 1;
 
     value = envchain_ask_value(name, key, noecho);
     if (value == NULL) return 1;
@@ -290,7 +325,19 @@ envchain_list_value_callback(const char *key, const char* value, void *raw_conte
   envchain_list_context* context = (envchain_list_context*)raw_context;
 
   if (context->show_value) {
-    printf("%s=%s\n", key, value);
+    if (context->unsafe_plain) {
+      printf("%s=%s\n", key, value);
+    }
+    else {
+      char *redacted = envchain_redact_value(value);
+      if (redacted != NULL) {
+        printf("%s=%s\n", key, redacted);
+        free(redacted);
+      }
+      else {
+        printf("%s=(redaction failed)\n", key);
+      }
+    }
   }
   else {
     printf("%s\n", key);
@@ -308,12 +355,16 @@ envchain_list_namespace_callback(const char *name, void *raw_context)
 int
 envchain_list(int argc, const char **argv)
 {
-  envchain_list_context context = {NULL,0};
+  envchain_list_context context = {NULL,0,0};
 
   while (0 < argc) {
     if (strcmp(argv[0], "--show-value") == 0 || strcmp(argv[0], "-v") == 0) {
       argv++; argc--;
       context.show_value = 1;
+    }
+    else if (strcmp(argv[0], "--unsafe-plain") == 0) {
+      argv++; argc--;
+      context.unsafe_plain = 1;
     }
     else {
       if (context.target) envchain_abort_with_help();
@@ -322,7 +373,13 @@ envchain_list(int argc, const char **argv)
     }
   }
 
+  if (context.unsafe_plain && !context.show_value) envchain_abort_with_help();
+
   if (context.target) {
+    if (context.show_value && context.unsafe_plain) {
+      fprintf(stderr,
+              "envchain: warning: printing secret values in plaintext\n");
+    }
     envchain_search_values(
       context.target, &envchain_list_value_callback, &context);
   }
@@ -345,10 +402,12 @@ envchain_unset(int argc, const char **argv)
 
   name = argv[0];
   argv++; argc--;
+  if (!envchain_validate_namespace_key(name, NULL)) return 1;
 
   while (0 < argc) {
     key = argv[0];
     argv++; argc--;
+    if (!envchain_validate_namespace_key(NULL, key)) return 1;
 
     envchain_delete_value(name, key);
   }
@@ -976,6 +1035,7 @@ envchain_exec(int argc, const char **argv)
 
   /* 1. Load secrets first — they may mutate PATH */
   while ((name = strsep(&names, ",")) != NULL) {
+    if (!envchain_validate_namespace_key(name, NULL)) goto cleanup;
     if (envchain_search_values(name, &envchain_exec_value_callback,
                                &metadata) != 0) {
       goto cleanup;

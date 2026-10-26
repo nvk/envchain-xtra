@@ -26,6 +26,7 @@ clean:
 
 test: all $(TEST_BIN)
 	./$(TEST_BIN)
+	./tests/test-hardening.sh
 
 $(TEST_BIN): tests/test-exec-metadata.c envchain_metadata.c envchain_metadata.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -I. -o $@ tests/test-exec-metadata.c envchain_metadata.c

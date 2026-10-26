@@ -11,6 +11,7 @@ typedef void (*envchain_namespace_search_callback)(const char *name,
 typedef struct {
   const char *target;
   int show_value;
+  int unsafe_plain;
 } envchain_list_context;
 
 int envchain_search_namespaces(envchain_namespace_search_callback callback,

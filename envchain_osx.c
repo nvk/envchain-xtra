@@ -391,13 +391,23 @@ envchain_save_value(const char *name, const char *key, char *value, int require_
 
       status = envchain_add_item_with_access(svc, acct, val, desc, require_passphrase);
       if (status != errSecSuccess) {
+        /*
+         * Restore must never silently downgrade access. Restoring with
+         * require_passphrase=0 would turn a user-presence-gated secret into
+         * one readable with no prompt at all. Always restore with prompting
+         * (the safer failure mode); if that also fails, say so loudly -
+         * the item is gone from the Keychain and must be re-added manually.
+         */
         fprintf(stderr,
-          "%s: failed to update item access mode, restoring previous value without prompt\n",
+          "%s: failed to update item access mode, restoring previous value with prompting enabled\n",
           envchain_name);
-        restore_status = envchain_add_item_with_access(svc, acct, old_val, desc, 0);
+        restore_status = envchain_add_item_with_access(svc, acct, old_val, desc, 1);
         if (restore_status != errSecSuccess) {
-          fprintf(stderr, "%s: failed to restore previous item: %d\n",
-                  envchain_name, (int)restore_status);
+          fprintf(stderr,
+            "%s: CRITICAL: could not restore %s.%s - the item was deleted and recovery failed (%d).\n"
+            "%s: Re-add it manually with: %s --set %s %s\n",
+            envchain_name, name, key, (int)restore_status,
+            envchain_name, envchain_name, name, key);
         }
       }
     }
