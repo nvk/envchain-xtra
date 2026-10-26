@@ -31,11 +31,30 @@ expect_ok() {
   fi
 }
 
+expect_fail_contains() {
+  local desc="$1" expected="$2" output
+  shift 2
+  if output=$("$@" 2>&1); then
+    echo "FAIL: $desc (expected non-zero exit)" >&2
+    fail=1
+  elif [[ "$output" == *"$expected"* ]]; then
+    echo "ok: $desc"
+  else
+    echo "FAIL: $desc (missing expected error: $expected)" >&2
+    printf '%s\n' "$output" >&2
+    fail=1
+  fi
+}
+
 # LOW-4: namespace and key validation
 expect_fail "namespace with space is rejected" "$EC" --set "bad ns" SOME_KEY </dev/null
 expect_fail "namespace with '=' is rejected" "$EC" --set "bad=ns" SOME_KEY </dev/null
-expect_fail "key with space is rejected" "$EC" --set goodns "BAD KEY" </dev/null
-expect_fail "key with '=' is rejected" "$EC" --set goodns "BAD=KEY" </dev/null
+expect_fail_contains "key with space is rejected as a key" \
+  "invalid key 'BAD KEY'" "$EC" --set goodns "BAD KEY" </dev/null
+expect_fail_contains "key with '=' is rejected as a key" \
+  "invalid key 'BAD=KEY'" "$EC" --set goodns "BAD=KEY" </dev/null
+expect_fail_contains "unset validates its key rather than a null namespace" \
+  "invalid key 'BAD KEY'" "$EC" --unset goodns "BAD KEY"
 expect_fail "exec namespace with space is rejected" "$EC" "bad ns" /bin/true
 
 # MEDIUM-2: --unsafe-plain requires --show-value

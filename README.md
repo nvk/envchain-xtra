@@ -81,6 +81,7 @@ Current fork responsibilities:
 
 Notable fork changes:
 
+- fixed the 1.4.1 key-validation regression that blocked `--set` and `--unset`
 - modernized the macOS backend away from deprecated Keychain APIs toward
   `SecItem`
 - added binary approval and fingerprint inspection commands

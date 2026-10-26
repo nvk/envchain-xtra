@@ -42,7 +42,7 @@
 #include "envchain_metadata.h"
 
 
-static const char version[] = "1.4.1";
+static const char version[] = "1.4.2";
 const char *envchain_name;
 
 /* for help */
@@ -203,7 +203,7 @@ envchain_name_key_is_valid(const char *value)
 static int
 envchain_validate_namespace_key(const char *name, const char *key)
 {
-  if (!envchain_name_key_is_valid(name)) {
+  if (name != NULL && !envchain_name_key_is_valid(name)) {
     fprintf(stderr,
             "envchain: invalid namespace '%s' (control characters, spaces, and '=' are not allowed)\n",
             name == NULL ? "(null)" : name);
@@ -213,6 +213,10 @@ envchain_validate_namespace_key(const char *name, const char *key)
     fprintf(stderr,
             "envchain: invalid key '%s' (control characters, spaces, and '=' are not allowed)\n",
             key);
+    return 0;
+  }
+  if (name == NULL && key == NULL) {
+    fprintf(stderr, "envchain: namespace or key is required\n");
     return 0;
   }
   return 1;
