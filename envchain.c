@@ -42,7 +42,7 @@
 #include "envchain_metadata.h"
 
 
-static const char version[] = "1.4.0";
+static const char version[] = "1.4.1";
 const char *envchain_name;
 
 /* for help */
